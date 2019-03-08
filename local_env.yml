@@ -1,0 +1,17 @@
+name: gap
+channels:
+  - soumith
+  - defaults
+  - conda-forge
+dependencies:
+  - pytorch=1.0.0
+  - python=3.6
+  - scipy
+  - tqdm
+  - docopt
+  - pytorch
+  - nltk
+  - torchvision
+  - spacy
+  - fire
+  - flake8

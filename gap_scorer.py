@@ -157,7 +157,7 @@ def calculate_scores(gold_annotations, system_annotations):
       denote no specific gender, i.e. overall scores.
   """
   scores = {}
-  for example_id, gold_annotation in gold_annotations.iteritems():
+  for example_id, gold_annotation in gold_annotations.items():
     system_annotation = system_annotations[example_id]
 
     name_a_annotations = [

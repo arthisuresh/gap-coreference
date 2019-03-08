@@ -1,0 +1,8 @@
+*.DS_Store
+__pycache__/
+conll-2012/
+conll-tar-files/
+wmt16.en-de.joined-dict.transformer.tar
+wmt16.en-de.joined-dict.transformer/
+processed_data/
+trained_models/
