@@ -8,6 +8,7 @@ import random
 import math
 
 PROCESSED_DATA_DIR = "processed_data"
+MODEL_NAME = "BERT_Attention"
 
 def bin_vector(value):
     assert(value >= 0)
@@ -74,9 +75,9 @@ def generate_binary_and_distance_features(passage_annotated, mention_start, ment
         n_words_bucketed, n_chars_bucketed, n_words_to_pronoun_bucketed, n_chars_to_pronoun_bucketed))
 
 def get_padded_word_embeddings_and_labels(dataset):
-    filename='gap-{}.tsv'.format(dataset)
+    filename = 'gap-{}.tsv'.format(dataset)
     data = pd.read_csv(filename, delimiter='\t')
-    num_samples=len(data)
+    num_samples = len(data)
     print("{num_samples} samples read from {filename}".format(num_samples=num_samples, filename=filename))
     nl
     emb_matrix_list = []
@@ -95,7 +96,7 @@ def get_padded_word_embeddings_and_labels(dataset):
     pad_sents()
 
 
-def get_feature_embeddings_and_labels(dataset):
+def get_feature_embeddings_and_labels(dataset, setting='pairs'):
     filename='gap-{}.tsv'.format(dataset)
     data = pd.read_csv(filename, delimiter='\t')
     num_samples=len(data)
@@ -104,6 +105,7 @@ def get_feature_embeddings_and_labels(dataset):
     emb_matrix_list = []
     output_vector_list = []
     for i, row in data.iterrows():
+        # Parse each row and extract the candidate mentions, and the ambiguous pronoun
         sent = row['Text']
         pronoun = row['Pronoun']
         pronoun_start = row['Pronoun-offset']
@@ -119,61 +121,81 @@ def get_feature_embeddings_and_labels(dataset):
 
         A_coref = row['A-coref']
         B_coref = row['B-coref']
-        output_vector = []
-        if A_coref is True:
-            output_vector = 0
-        elif B_coref is True:
-            output_vector = 1
-        else:
-            output_vector = 2
 
         passage_annotated = nlp(sent)
-        
-        # segment the sentence in terms of noun chunks and words in the mention
-        embedding_vector_A = generate_embedding_vector(passage_annotated, mention_A_start, mention_A_end)
-        embedding_vector_B = generate_embedding_vector(passage_annotated, mention_B_start, mention_B_end)
-        embedding_vector_pronoun = generate_embedding_vector(passage_annotated, pronoun_start, pronoun_end)
-        position_features_A = generate_binary_and_distance_features(passage_annotated, mention_A_start, mention_A_end, pronoun_start, pronoun_end)
-        position_features_B = generate_binary_and_distance_features(passage_annotated, mention_B_start, mention_B_end, pronoun_start, pronoun_end)
-        document_embedding = np.mean(np.vstack([word.vector for word in passage_annotated]), axis=0)
+        feature_vectors = []
+        output_vector = []
+        # there are two possible settings:
+        # 1. having knowledge of the two mentions A and B in the input to our model ('classification', since this
+        #       essentially a 3-class classification task)
+        # 2. not having knowledge of the two mentions A and B until evaluation ('pairs')
+        if setting == 'classification':
+            if A_coref is True:
+                output_vectors = 0
+            elif B_coref is True:
+                output_vector = 1
+            else:
+                output_vector = 2
+            # generate features for mention A, B, the pronoun, position features, the overall document embedding,
+            # and feature vectors
+            embedding_vector_A = generate_embedding_vector(passage_annotated, mention_A_start, mention_A_end)
+            embedding_vector_B = generate_embedding_vector(passage_annotated, mention_B_start, mention_B_end)
+            embedding_vector_pronoun = generate_embedding_vector(passage_annotated, pronoun_start, pronoun_end)
+            position_features_A = generate_binary_and_distance_features(passage_annotated, mention_A_start, mention_A_end, pronoun_start, pronoun_end)
+            position_features_B = generate_binary_and_distance_features(passage_annotated, mention_B_start, mention_B_end, pronoun_start, pronoun_end)
+            document_embedding = np.mean(np.vstack([word.vector for word in passage_annotated]), axis=0)
+            feature_vectors = np.hstack((embedding_vector_A, embedding_vector_B, embedding_vector_pronoun, position_features_A, position_features_B, document_embedding))
+        elif setting == 'pairs':
+            feature_vectors = []
+            output_vectors = []
+            emb_vector_pronoun = generate_embedding_vector(passage_annotated, pronoun_start, pronoun_end)
+            document_embedding = np.mean(np.vstack([word.vector for word in passage_annotated]), axis=0)
+            print(sent)
+            print((pronoun, mention_A, A_coref, mention_B, B_coref))
+            for ent in passage_annotated.ents:
+                emb_vector_candidate = generate_embedding_vector(passage_annotated, ent.start_char, ent.end_char)
+                position_features = generate_binary_and_distance_features(passage_annotated, ent.start_char, ent.end_char, pronoun_start, pronoun_end)
+                feature_vector = np.hstack((emb_vector_candidate, emb_vector_pronoun, position_features, document_embedding))
+                feature_vectors.append(feature_vector) 
+                output_vectors.append(1 if ((ent.text == mention_A and A_coref) or (ent.text == mention_B and B_coref)) else 0)
+            if not (A_coref or B_coref):
+                output_vectors.append(1) # TODO: how to deal with null antecedent in input features
+            else:
+                output_vectors.append(0)
 
-        feature_vector = np.hstack((embedding_vector_A, embedding_vector_B, embedding_vector_pronoun, position_features_A, position_features_B, document_embedding))
-        emb_matrix_list.append(feature_vector)
-        output_vector_list.append(output_vector)
+        emb_matrix_list.append(torch.from_numpy(np.vstack(feature_vectors)))
+        output_vector_list.append(torch.Tensor(output_vectors))
 
-    emb_matrix = np.vstack(emb_matrix_list)
-    output_matrix = np.array(output_vector_list)
-    return (torch.from_numpy(emb_matrix), torch.from_numpy(output_matrix))
+    return (emb_matrix_list, output_vector_list)
    
-def prepare_data(dataset, reload=False):
+
+def prepare_data(dataset, setting='pairs', reload=False):
     # prepare training features
     X_data_output_path = os.path.join(
         PROCESSED_DATA_DIR,
-        'processed_{dataset}_X.pt'.format(dataset=dataset)
+        '{setting}_processed_{dataset}_X.pt'.format(dataset=dataset, setting=setting)
     )
     Y_data_output_path = os.path.join(
         PROCESSED_DATA_DIR,
-        'processed_{dataset}_Y.pt'.format(dataset=dataset)
+        '{setting}_processed_{dataset}_Y.pt'.format(dataset=dataset, setting=setting)
     )
     if not os.path.exists(X_data_output_path) \
         or not os.path.exists(Y_data_output_path) or reload:
-        X_data, Y_data = get_feature_embeddings_and_labels(dataset)
-        print(X_data.size())
-        print(Y_data.size())
+        X_data, Y_data = get_feature_embeddings_and_labels(dataset, setting)
         torch.save(X_data, X_data_output_path)
         torch.save(Y_data, Y_data_output_path)
 
-def load_data(dataset):
+
+def load_data(dataset, setting='pairs'):
     X_data_path = os.path.join(
         PROCESSED_DATA_DIR,
-        'processed_{dataset}_X.pt'.format(dataset=dataset)
+        '{setting}_processed_{dataset}_X.pt'.format(dataset=dataset, setting=setting)
     )
     Y_data_path = os.path.join(
         PROCESSED_DATA_DIR,
-        'processed_{dataset}_Y.pt'.format(dataset=dataset)
+        '{setting}_processed_{dataset}_Y.pt'.format(dataset=dataset, setting=setting)
     )
     filename='gap-{}.tsv'.format(dataset)
     data = pd.read_csv(filename, delimiter='\t')
     ids = data['ID'].tolist()
-    print(ids)
-    return ids, torch.load(X_data_path).float(), torch.load(Y_data_path).long()
+    return ids, torch.load(X_data_path), torch.load(Y_data_path)
