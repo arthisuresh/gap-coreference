@@ -125,7 +125,6 @@ def read_annotations(filename, is_gold):
   annotations = defaultdict(Annotation)
   with open(filename, 'rU') as f:
     reader = csv.DictReader(f, fieldnames=fieldnames, delimiter='\t')
-
     # Skip the header line in the gold data
     if is_gold:
       next(reader, None)
@@ -241,7 +240,7 @@ def run_scorer(gold_tsv, system_tsv):
   assert system_annotations, 'No system annotations read!'
 
   scores = calculate_scores(gold_annotations, system_annotations)
-  return make_scorecard(scores)
+  return make_scorecard(scores), scores
 
 
 def main(args):
@@ -250,7 +249,7 @@ def main(args):
   Args:
     args: argparse namespace containing gold_tsv and system_tsv.
   """
-  scorecard = run_scorer(args.gold_tsv, args.system_tsv)
+  scorecard, scores = run_scorer(args.gold_tsv, args.system_tsv)
   print(scorecard)
 
 
