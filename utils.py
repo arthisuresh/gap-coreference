@@ -52,11 +52,15 @@ def get_bert_embeddings(passage_text):
     # print([word.text for word in passage_text_processed])
     carry_over = None
     had_carry_over = False
+    # print([word for word in passage_text_processed])
     for w_i, word in enumerate(passage_text_processed):
         # print("WORD is {word}".format(word=word))
         word = word.text.lower()
         first_attention_vector = nonseparators[i]
         current_word = ''
+        if word == ' ':
+            attn_vectors_per_word.append(first_attention_vector)
+            continue
         if carry_over:
             current_word = carry_over
             carry_over = None
@@ -341,6 +345,7 @@ def load_data(dataset, setting='pairs'):
     ids = data['ID'].tolist()
     return ids, torch.load(X_data_path), torch.load(Y_data_path), torch.load(E_data_path), torch.load(M_data_path)
 sent = "John Nixon (May 10, 1815 - June 3, 1899), English mining engineer and colliery proprietor, was born at Barlow, Durham, the son of a farmer. He was educated at the village school, and at an academy in Newcastle-on-Tyne, where he distinguished himself in mathematics."
-sent_p = nlp(sent)
-# get_bert_embeddings("By this time, Karen Blixen had separated from her husband, and after their divorce in 1925, Finch Hatton moved into her house and began leading safaris for wealthy sportsmen. Among his clients were Marshall Field Jr and Edward, Prince of Wales. According to the author Mary Lovell, in 1930 Finch Hatton began a love affair with Beryl Markham, who was working as a race-horse trainer in Nairobi and the surrounding area. Later, she would become known as a pioneer flyer herself (Markham attributed her interest in flying to her association with Tom Campbell Black).")
-# generate_bert_vector(sent, sent_p, 103, 108)
+sent = "Charlotte Church  - Singer and TV chat show host moved to the village in July 2010 Hannah Mills - British sailor, Olympic silver medalist at London 2012 Olympic Games in the Women's 470 Class she went on to win the gold medal at the 2016 Olympic Games in Rio de Janeiro, from Dinas Powys"
+# sent_p = nlp(sent)
+# # get_bert_embeddings("By this time, Karen Blixen had separated from her husband, and after their divorce in 1925, Finch Hatton moved into her house and began leading safaris for wealthy sportsmen. Among his clients were Marshall Field Jr and Edward, Prince of Wales. According to the author Mary Lovell, in 1930 Finch Hatton began a love affair with Beryl Markham, who was working as a race-horse trainer in Nairobi and the surrounding area. Later, she would become known as a pioneer flyer herself (Markham attributed her interest in flying to her association with Tom Campbell Black).")
+# generate_bert_vector(sent, sent_p, 83, 94)
